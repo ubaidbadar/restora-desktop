@@ -78,3 +78,24 @@ browser instead of relaxing Electron security.
    auto updates and support/rollback instructions.
 
 Do not mistake an installer artifact for a production-ready Windows POS.
+
+## Verified Windows build downloads
+
+The Actions build pins **Electron ${manifest.version}** and SHA-256 in
+`electron-release.json`. It first uses the official `electron/electron` GitHub
+release API via `gh release download` (with retry and a validated cache), then
+falls back to official `@electron/get` with retry if GitHub's API route fails.
+Both paths verify the archive against the pinned official SHA-256 before it is
+unpacked. Do not replace either source with a third-party binary mirror.
+
+The workflow validates that the portable ZIP contains the executable and shell
+sources, and uploads the ZIP as a GitHub Actions test artifact if packaging
+succeeds. It also tries an unsigned NSIS installer. A successful ZIP-structure
+check is **not** a Windows desktop launch or hardware acceptance test.
+
+Before a commercial release, manually test on Windows 10 and 11: launch
+`https://app.restora.live/`, signed-in session persistence, Meta embedded
+signup/popup behavior, paired Rust agent on `127.0.0.1:17777`, offline
+queue/recovery, ESC/POS printing, and cross-restaurant tenant isolation.
+Only distribute after code signing, installer integrity checks and approval.
+If the official release is unreachable, issue #2 remains blocked.
