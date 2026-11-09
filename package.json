@@ -1,0 +1,53 @@
+{
+  "name": "restora-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Restora Windows POS desktop application",
+  "main": "src/main.cjs",
+  "author": "Restora",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env RESTORA_DESKTOP_DEV=1 electron .",
+    "test": "node --test test/*.test.cjs",
+    "check": "node --check src/main.cjs && node --check src/security.cjs && node --check scripts/package-portable.cjs && npm test",
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "dist:portable": "node scripts/package-portable.cjs"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12",
+    "cross-env": "^10.1.0",
+    "@electron/get": "^2.0.3"
+  },
+  "build": {
+    "appId": "live.restora.desktop",
+    "productName": "Restora POS",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "Restora-POS-Setup-${version}-${arch}.${ext}"
+    }
+  }
+}
