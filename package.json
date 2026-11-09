@@ -15,7 +15,7 @@
     "dist:portable": "node scripts/package-portable.cjs"
   },
   "devDependencies": {
-    "electron": "^39.0.0",
+    "electron": "39.8.10",
     "electron-builder": "^26.0.12",
     "cross-env": "^10.1.0",
     "@electron/get": "^2.0.3"
