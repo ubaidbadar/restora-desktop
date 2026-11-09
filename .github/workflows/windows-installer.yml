@@ -1,42 +1,100 @@
 name: Windows installer (unsigned test artifact)
 on:
   workflow_dispatch:
+  push:
+    branches: [dev, main]
   pull_request:
 permissions:
   contents: read
 jobs:
   installer:
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install dependencies (skip the Electron runtime until packaging)
+      - name: Install dependencies without Electron's install-time download
         env:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm install --no-audit --no-fund
+      - name: Run security and packaging checks
+        run: npm run check
+      - name: Cache official Electron archive
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/restora-electron
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('electron-release.json') }}
+      - name: Fetch and SHA-256 verify the official Electron Windows release
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Continue'
-          for ($attempt = 1; $attempt -le 4; $attempt++) {
-            npm install --no-audit --no-fund
-            if ($LASTEXITCODE -eq 0) { exit 0 }
-            if ($attempt -eq 4) { exit $LASTEXITCODE }
-            Write-Host "Electron download failed; retrying attempt $($attempt + 1) ..."
-            Start-Sleep -Seconds (15 * $attempt)
+          $ErrorActionPreference = 'Stop'
+          $manifest = Get-Content -LiteralPath 'electron-release.json' -Raw | ConvertFrom-Json
+          if ($manifest.platform -ne 'win32' -or $manifest.arch -ne 'x64') {
+            throw 'Unexpected Electron archive platform/architecture'
           }
-      - run: npm run check
+          $asset = "electron-v$($manifest.version)-win32-x64.zip"
+          $directory = Join-Path $env:RUNNER_TEMP 'restora-electron'
+          $archive = Join-Path $directory $asset
+          New-Item -ItemType Directory -Force -Path $directory | Out-Null
+          $verified = $false
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            if (Test-Path -LiteralPath $archive) {
+              $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -eq $manifest.sha256) {
+                $verified = $true
+                break
+              }
+              Remove-Item -LiteralPath $archive -Force
+              Write-Warning 'Cached Electron archive had a mismatched checksum; discarded'
+            }
+            Write-Host "Fetching $asset from electron/electron GitHub Releases (attempt $attempt/5)"
+            gh release download "v$($manifest.version)" --repo electron/electron --pattern $asset --dir $directory --clobber
+            if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $archive)) {
+              $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -ne $manifest.sha256) {
+                Remove-Item -LiteralPath $archive -Force
+                throw "Official Electron archive checksum mismatch (actual: $actual)"
+              }
+              $verified = $true
+              break
+            }
+            if ($attempt -lt 5) {
+              Start-Sleep -Seconds (10 * $attempt)
+            }
+          }
+          if ($verified) {
+            Add-Content -LiteralPath $env:GITHUB_ENV -Value "RESTORA_ELECTRON_ARCHIVE=$archive"
+            Write-Host "Verified official Electron $($manifest.version) SHA-256: $($manifest.sha256)"
+          } else {
+            Write-Warning 'GitHub CLI download unavailable; packaging will retry through official @electron/get endpoint'
+          }
       - name: Package portable Windows desktop
         run: npm run dist:portable
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Validate portable ZIP contents
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path dist -Filter 'Restora-POS-Portable-*-win-x64.zip' | Select-Object -First 1
+          if (-not $zip) { throw 'Portable Windows ZIP is missing' }
+          $unpacked = Join-Path $env:RUNNER_TEMP 'restora-portable-validation'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $unpacked -Force
+          foreach ($item in @('Restora POS.exe', 'resources/app/package.json', 'resources/app/src/main.cjs', 'resources/app/src/security.cjs')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $unpacked $item))) {
+              throw "Portable ZIP missing $item"
+            }
+          }
+          Write-Host 'Portable ZIP file structure verified; interactive Windows acceptance remains required'
       - uses: actions/upload-artifact@v4
         with:
           name: restora-windows-portable
-          path: dist/*.zip
+          path: dist/Restora-POS-Portable-*.zip
           if-no-files-found: error
-      - name: Attempt NSIS test installer
+      - name: Attempt NSIS unsigned test installer
         continue-on-error: true
         run: npm run dist
         env:
@@ -44,5 +102,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: restora-windows-unsigned-installer
-          path: dist/*.exe
+          path: dist/Restora-POS-Setup-*.exe
           if-no-files-found: warn
