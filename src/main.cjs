@@ -84,12 +84,16 @@ else {
     window.focus();
   });
   app.on('ready', () => {
-    // A remote website must not obtain device, media, clipboard, geolocation,
-    // HID/serial/USB or other platform capabilities via Electron.
-    session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => {
-      callback(permission === 'notifications');
+    // The existing paired Rust agent is reachable on 127.0.0.1:17777 from the
+    // trusted app. Allow local-network access only for this origin; no broader
+    // device, media, clipboard, geolocation, HID/serial/USB permissions.
+    const allowedPermissions = new Set(['notifications', 'local-network-access']);
+    session.defaultSession.setPermissionRequestHandler((contents, permission, callback) => {
+      callback(isInternalUrl(contents.getURL(), APP_URL) && allowedPermissions.has(permission));
     });
-    session.defaultSession.setPermissionCheckHandler((_contents, permission) => permission === 'notifications');
+    session.defaultSession.setPermissionCheckHandler((_contents, permission, requestingOrigin) => {
+      return isInternalUrl(requestingOrigin, APP_URL) && allowedPermissions.has(permission);
+    });
     session.defaultSession.on('will-download', event => {
       // Downloads are not allowed until an explicit receipt-export workflow exists.
       event.preventDefault();
