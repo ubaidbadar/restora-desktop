@@ -41,7 +41,10 @@ npm run dist
 ```
 
 Or run **Actions → Windows installer (unsigned test artifact) → Run workflow**.
-The `restora-windows-unsigned-installer` artifact contains a test installer.
+The workflow builds a portable `restora-windows-portable` ZIP first and then
+attempts an NSIS installer (artifact `restora-windows-unsigned-installer`).
+If the NSIS tool download fails, use the portable archive: unzip it and start
+`Restora POS.exe` from the extracted directory. Both are unsigned internal-test builds.
 
 This first installer is **unsigned** and is intended for internal testing only.
 Do not distribute commercially before code signing, publisher details,
