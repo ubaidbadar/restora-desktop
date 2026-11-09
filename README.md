@@ -6,9 +6,12 @@ A minimal **Electron container** for the existing React restaurant POS at
 existing Better Auth cookie session and REST API. **No forked menu, order,
 offline queue or business logic.**
 
-This repository is not the Rust printing agent. Native printing stays in
-[restora-pc-agent](https://github.com/ubaidbadar/restora-pc-agent) pending
-an explicitly designed, authenticated desktop-to-agent integration.
+This repository is not the Rust printing agent. The existing
+[restora-pc-agent](https://github.com/ubaidbadar/restora-pc-agent) is a separate
+Windows tray process with its own secure pairing and `http://127.0.0.1:17777`
+local API. The React dashboard already supports that agent. Electron loads the
+same dashboard origin, so **no new privileged IPC or duplicated printer
+protocol** is required. Staff must install and pair the agent separately.
 
 ## Run locally
 
@@ -50,7 +53,7 @@ auto-update signing/verification, Windows SmartScreen testing and installer QA.
 - No privileged preload script, IPC bridge or webview access
 - Top-level navigation confined to the approved Restora app origin
 - External HTTPS, mailto and telephone links open in the operating-system browser
-- Host permissions restricted; downloads blocked pending secure export design
+- Host permissions restricted. The trusted app origin may request notification and local-network access for the existing paired Rust printer agent; downloads are blocked pending secure export design.
 - Electron main process never handles session cookies, tenant IDs or Meta tokens
 - HTTPS production URL is fixed; localhost override only when intentionally developing
 
@@ -67,8 +70,7 @@ browser instead of relaxing Electron security.
 ## Delivery phases
 
 1. **Foundation:** secure Electron shell, CI, Windows NSIS test installer, tests.
-2. **Integration:** deliberate desktop-to-Rust printing-agent protocol, discovery,
-   pairing, secure receipt dispatch, explicit permissions and retry behavior.
+2. **Integration:** run the existing Rust printer agent beside Electron; verify local pairing, offline slips, CORS/private-network permissions, backend retry behavior and Windows ESC/POS printers.
 3. **Release:** Windows hardware print QA, offline/online order replay, signing,
    auto updates and support/rollback instructions.
 
