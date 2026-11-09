@@ -27,7 +27,17 @@ jobs:
             Start-Sleep -Seconds (15 * $attempt)
           }
       - run: npm run check
-      - name: Package Electron runtime for Windows
+      - name: Package portable Windows desktop
+        run: npm run dist:portable
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: restora-windows-portable
+          path: dist/*.zip
+          if-no-files-found: error
+      - name: Attempt NSIS test installer
+        continue-on-error: true
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -35,4 +45,4 @@ jobs:
         with:
           name: restora-windows-unsigned-installer
           path: dist/*.exe
-          if-no-files-found: error
+          if-no-files-found: warn

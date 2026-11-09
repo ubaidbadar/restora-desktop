@@ -11,7 +11,8 @@
     "dev": "cross-env RESTORA_DESKTOP_DEV=1 electron .",
     "test": "node --test test/*.test.cjs",
     "check": "node --check src/main.cjs && node --check src/security.cjs && npm test",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "dist:portable": "electron-builder --win zip --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^39.0.0",
