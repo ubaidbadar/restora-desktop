@@ -23,10 +23,9 @@
   the Restora Agent Store package (same publisher, same brand).
 
   Known limitation, NOT verified here: the dashboard talks to the
-  paired Rust print agent on 127.0.0.1:17777. privateNetworkClientServer
-  is declared below, but loopback behaviour of the packaged app MUST
-  be verified on a real Windows PC after install (see
-  packaging/STORE-LISTING.md).
+  native print engine bundled inside this MSIX on 127.0.0.1:17777.
+  FullTrust child process launch and loopback behaviour MUST be
+  verified after Store installation (see packaging/STORE-LISTING.md).
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -75,11 +74,11 @@
 
   <Capabilities>
     <!-- Full-trust Win32 Electron app: hosts the dashboard window and
-         talks to the locally paired print agent. Restricted capability:
+         starts its included native print engine. Restricted capability:
          Store certification will ask for justification (see
          packaging/STORE-LISTING.md). -->
     <rescap:Capability Name="runFullTrust" />
-    <!-- Local print agent on 127.0.0.1:17777 + private-network access.
+    <!-- Built-in print engine on 127.0.0.1:17777 + private-network access.
          Does NOT by itself guarantee loopback — verify on real Windows. -->
     <Capability Name="privateNetworkClientServer" />
     <Capability Name="internetClient" />
