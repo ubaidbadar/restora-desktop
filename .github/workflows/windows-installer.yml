@@ -9,7 +9,7 @@ permissions:
 jobs:
   installer:
     runs-on: windows-latest
-    timeout-minutes: 55
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -72,6 +72,9 @@ jobs:
           } else {
             Write-Warning 'GitHub CLI download unavailable; packaging will retry through official @electron/get endpoint'
           }
+      - name: Compile source-pinned native printing engine
+        uses: ./.github/actions/build-print-engine
+
       - name: Package portable Windows desktop
         run: npm run dist:portable
         env:
@@ -83,12 +86,86 @@ jobs:
           if (-not $zip) { throw 'Portable Windows ZIP is missing' }
           $unpacked = Join-Path $env:RUNNER_TEMP 'restora-portable-validation'
           Expand-Archive -LiteralPath $zip.FullName -DestinationPath $unpacked -Force
-          foreach ($item in @('Restora POS.exe', 'resources/app/package.json', 'resources/app/src/main.cjs', 'resources/app/src/security.cjs')) {
+          foreach ($item in @('Restora POS.exe', 'resources/app/package.json', 'resources/app/src/main.cjs', 'resources/app/src/security.cjs', 'resources/app/src/print_engine.cjs', 'resources/print-engine/restora-pc-agent.exe')) {
             if (-not (Test-Path -LiteralPath (Join-Path $unpacked $item))) {
               throw "Portable ZIP missing $item"
             }
           }
           Write-Host 'Portable ZIP file structure verified; interactive Windows acceptance remains required'
+      - name: Smoke test packaged Electron owns native printing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $desktop = Resolve-Path 'dist/portable/Restora POS.exe'
+          $before = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).'Restora Agent'
+          $process = Start-Process -FilePath $desktop -PassThru
+          try {
+            $healthy = $false
+            for ($attempt = 0; $attempt -lt 45; $attempt++) {
+              Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) { throw 'Packaged Restora Desktop quit during native startup' }
+              try {
+                $response = Invoke-WebRequest 'http://127.0.0.1:17777/status' -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $healthy = $true; break }
+              } catch { }
+            }
+            if (-not $healthy) { throw 'Restora Desktop did not start its included print engine' }
+            $blocked = Invoke-WebRequest 'http://127.0.0.1:17777/print' -Method POST -Body '{}' -ContentType 'application/json' -SkipHttpErrorCheck
+            if ($blocked.StatusCode -ne 403) { throw "Originless print not rejected: $($blocked.StatusCode)" }
+            $after = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).'Restora Agent'
+            if ($before -ne $after) { throw 'Embedded engine altered standalone Windows startup settings' }
+            Write-Host 'Desktop launched native engine, kept origin security and did not install a separate startup service'
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+          # The embedded engine watches its owner handle; no hidden service may remain.
+          $stopped = $false
+          for ($attempt = 0; $attempt -lt 15; $attempt++) {
+            Start-Sleep -Seconds 1
+            try {
+              $null = Invoke-WebRequest 'http://127.0.0.1:17777/status' -TimeoutSec 1
+            } catch {
+              $stopped = $true
+              break
+            }
+          }
+          if (-not $stopped) { throw 'Embedded printing engine survived the owning desktop process' }
+          Write-Host 'Embedded engine stopped with Electron'
+
+      - name: Test sandboxed Electron renderer can reach built-in printing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $node = (Get-Command node).Source
+          $web = Start-Process -FilePath $node -ArgumentList 'scripts/renderer-print-smoke.cjs' -WorkingDirectory $env:GITHUB_WORKSPACE -PassThru -WindowStyle Hidden
+          $desktop = $null
+          try {
+            $env:RESTORA_DESKTOP_DEV = '1'
+            $env:RESTORA_APP_URL = 'http://127.0.0.1:3000/'
+            $env:RESTORA_ORIGINS = 'http://127.0.0.1:3000'
+            $desktop = Start-Process -FilePath (Resolve-Path 'dist/portable/Restora POS.exe') -PassThru
+            $reportFile = Join-Path $env:GITHUB_WORKSPACE 'renderer-print-smoke-result.json'
+            for ($attempt = 0; $attempt -lt 45; $attempt++) {
+              Start-Sleep -Seconds 1
+              if (Test-Path $reportFile) { break }
+              $desktop.Refresh()
+              if ($desktop.HasExited) { throw 'Electron exited before renderer printing check' }
+            }
+            if (-not (Test-Path $reportFile)) { throw 'Electron renderer never reported its localhost fetch result' }
+            $result = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
+            if ($result.ok -ne $true -or $result.status -ne 200 -or $result.ua -notlike '*RestoraDesktop/1*') {
+              throw "Electron renderer could not reach secured native printing: $(ConvertTo-Json $result -Compress)"
+            }
+            Write-Host 'Sandboxed Electron renderer reached bundled printing service with trusted origin and desktop UI marker'
+          } finally {
+            if ($desktop) { Stop-Process -Id $desktop.Id -Force -ErrorAction SilentlyContinue }
+            Stop-Process -Id $web.Id -Force -ErrorAction SilentlyContinue
+            Remove-Item Env:RESTORA_DESKTOP_DEV -ErrorAction SilentlyContinue
+            Remove-Item Env:RESTORA_APP_URL -ErrorAction SilentlyContinue
+            Remove-Item Env:RESTORA_ORIGINS -ErrorAction SilentlyContinue
+          }
+
       - uses: actions/upload-artifact@v4
         with:
           name: restora-windows-portable

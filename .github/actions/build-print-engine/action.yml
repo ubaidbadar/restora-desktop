@@ -1,0 +1,33 @@
+name: Build bundled Windows print engine
+description: Build the exact pinned Restora print engine into the desktop package
+runs:
+  using: composite
+  steps:
+    - name: Read pinned print engine source
+      id: source
+      shell: pwsh
+      run: |
+        $manifest = Get-Content -LiteralPath print-engine.json -Raw | ConvertFrom-Json
+        if ($manifest.repository -ne 'ubaidbadar/restora-pc-agent' -or $manifest.sha -notmatch '^[a-f0-9]{40}$') {
+          throw 'Invalid Restora print engine source pin'
+        }
+        "sha=$($manifest.sha)" >> $env:GITHUB_OUTPUT
+    - name: Checkout pinned print engine
+      uses: actions/checkout@v4
+      with:
+        repository: ubaidbadar/restora-pc-agent
+        ref: ${{ steps.source.outputs.sha }}
+        path: print-engine-source
+        persist-credentials: false
+    - name: Verify pinned source and compile native engine
+      shell: pwsh
+      run: |
+        $expected = (Get-Content -LiteralPath print-engine.json -Raw | ConvertFrom-Json).sha
+        $actual = (git -C print-engine-source rev-parse HEAD).Trim()
+        if ($actual -ne $expected) { throw 'Native print engine checkout changed unexpectedly' }
+        cargo build --release --locked --manifest-path print-engine-source/Cargo.toml --config 'profile.release.strip="symbols"' --config 'profile.release.lto="thin"' --config 'profile.release.codegen-units=1'
+        if ($LASTEXITCODE -ne 0) { throw 'Native print engine compilation failed' }
+        New-Item -ItemType Directory -Force native | Out-Null
+        Copy-Item -LiteralPath print-engine-source/target/release/restora-pc-agent.exe -Destination native/print-engine.exe
+        if ((Get-Item native/print-engine.exe).Length -lt 100000) { throw 'Native print engine binary invalid' }
+        Get-FileHash native/print-engine.exe -Algorithm SHA256

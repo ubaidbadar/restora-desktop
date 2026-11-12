@@ -10,9 +10,9 @@
     "start": "electron .",
     "dev": "cross-env RESTORA_DESKTOP_DEV=1 electron .",
     "test": "node --test test/*.test.cjs",
-    "check": "node --check src/main.cjs && node --check src/security.cjs && node --check scripts/package-portable.cjs && npm test",
-    "dist": "electron-builder --win nsis --x64 --publish never",
-    "dist:portable": "node scripts/package-portable.cjs"
+    "check": "node --check src/main.cjs && node --check src/security.cjs && node --check src/print_engine.cjs && node --check scripts/package-portable.cjs && node --check scripts/require-print-engine.cjs && npm test",
+    "dist": "node scripts/require-print-engine.cjs && electron-builder --win nsis --x64 --publish never",
+    "dist:portable": "node scripts/require-print-engine.cjs && node scripts/package-portable.cjs"
   },
   "devDependencies": {
     "electron": "39.8.10",
@@ -48,6 +48,12 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "artifactName": "Restora-POS-Setup-${version}-${arch}.${ext}"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "native/print-engine.exe",
+        "to": "print-engine/restora-pc-agent.exe"
+      }
+    ]
   }
 }
