@@ -9,7 +9,7 @@
     Identity Name:   BadarDigital.RestoraLive  [CONFIRMED 2026-11-12]
     Publisher:       CN=72D821D7-890E-4CCA-94D2-675D84F355AA
     Publisher name:  Badar Digital
-    Version:         0.1.0.0 (4-part form of package.json 0.1.0)
+    Version:         0.1.1.0 (4-part form of package.json 0.1.1)
   They MUST match the Partner Center product identity exactly, or the
   Store submission will reject the package. Do NOT change the version
   by hand: bump it only when the Store package version changes.
@@ -36,7 +36,7 @@
   <Identity
     Name="BadarDigital.RestoraLive"
     Publisher="CN=72D821D7-890E-4CCA-94D2-675D84F355AA"
-    Version="0.1.0.0"
+    Version="0.1.1.0"
     ProcessorArchitecture="x64" />
 
   <Properties>
