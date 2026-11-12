@@ -188,7 +188,11 @@ jobs:
         run: |
           $size = (Get-Item "$env:GITHUB_WORKSPACE\$env:PACKAGE_NAME").Length
           Write-Host "MSIX size: $size bytes"
-          if ($size -gt 130000000) { throw "MSIX is $size bytes, over the 130,000,000-byte hand-off limit." }
+          # 128 MiB is 134,217,728 bytes, not 128,000,000. Keep the strict
+          # binary hand-off size limit without removing required Electron
+          # GPU, language or licensing files from the packaged application.
+          $limit = 128 * 1024 * 1024
+          if ($size -gt $limit) { throw "MSIX is $size bytes, over the 128 MiB ($limit-byte) hand-off limit." }
 
       - name: Upload the MSIX artifact
         uses: actions/upload-artifact@v4
