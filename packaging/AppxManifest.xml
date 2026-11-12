@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Restora Live — Microsoft Store package manifest.
+
+  Identity values are the verified Partner Center values for the
+  "Badar Digital" account (seller ID 97202990), checked 2026-11-12:
+    App name:        Restora Live  [RESERVED 2026-11-12]
+    Store ID:        9NHM8DPCGPZD
+    Identity Name:   BadarDigital.RestoraLive  [CONFIRMED 2026-11-12]
+    Publisher:       CN=72D821D7-890E-4CCA-94D2-675D84F355AA
+    Publisher name:  Badar Digital
+    Version:         0.1.0.0 (4-part form of package.json 0.1.0)
+  They MUST match the Partner Center product identity exactly, or the
+  Store submission will reject the package. Do NOT change the version
+  by hand: bump it only when the Store package version changes.
+
+  The package is built unsigned by .github/workflows/msix.yml
+  (checksum-verified Electron portable build, then MakeAppx).
+  Microsoft signs it after Store certification; it is NOT a customer
+  installer and must not be distributed as one.
+
+  Assets in packaging/Assets are the Restora brand logos, shared with
+  the Restora Agent Store package (same publisher, same brand).
+
+  Known limitation, NOT verified here: the dashboard talks to the
+  paired Rust print agent on 127.0.0.1:17777. privateNetworkClientServer
+  is declared below, but loopback behaviour of the packaged app MUST
+  be verified on a real Windows PC after install (see
+  packaging/STORE-LISTING.md).
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity
+    Name="BadarDigital.RestoraLive"
+    Publisher="CN=72D821D7-890E-4CCA-94D2-675D84F355AA"
+    Version="0.1.0.0"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Restora Live</DisplayName>
+    <PublisherDisplayName>Badar Digital</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Restora Live: the Windows desktop app for Restora restaurants</Description>
+    <Framework>false</Framework>
+  </Properties>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Applications>
+    <Application
+      Id="RestoraLive"
+      Executable="Restora POS.exe"
+      EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="Restora Live"
+        Description="Run your restaurant from your Windows PC — orders, tables, menu and POS."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <!-- Full-trust Win32 Electron app: hosts the dashboard window and
+         talks to the locally paired print agent. Restricted capability:
+         Store certification will ask for justification (see
+         packaging/STORE-LISTING.md). -->
+    <rescap:Capability Name="runFullTrust" />
+    <!-- Local print agent on 127.0.0.1:17777 + private-network access.
+         Does NOT by itself guarantee loopback — verify on real Windows. -->
+    <Capability Name="privateNetworkClientServer" />
+    <Capability Name="internetClient" />
+  </Capabilities>
+
+</Package>
