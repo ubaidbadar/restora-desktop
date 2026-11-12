@@ -5,3 +5,7 @@ dist/
 !.env.example
 .DS_Store
 *.log
+
+# Native Rust executable is compiled only in Windows CI from a pinned commit.
+native/print-engine.exe
+print-engine-source/
