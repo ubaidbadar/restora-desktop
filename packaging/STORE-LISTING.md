@@ -10,8 +10,9 @@ Publisher: Badar Digital (CN=72D821D7-890E-4CCA-94D2-675D84F355AA)
 
 **Description:** Restora Live is the Windows desktop app for Restora
 restaurants. It runs your restaurant's dashboard — orders, tables,
-menu, and POS — in a secure desktop window, and works with the Restora
-print agent on your PC to print kitchen tickets and receipts.
+menu, and POS — in a secure desktop window. Its built-in Windows
+printing engine handles kitchen tickets and customer receipts without
+installing a second application.
 
 **Short description:** Restora Live is the Windows desktop app for
 Restora restaurants. It runs your restaurant's dashboard — orders,
@@ -21,8 +22,9 @@ tables, menu, and POS — in a secure desktop window.
 - Take and track orders, tables and reservations from your PC.
 - Run the POS with staff PINs and an audit log.
 - Manage your menu and stock.
-- Print kitchen tickets and receipts with the Restora print agent
-  (installed separately, paired with a 6-digit code).
+- Print kitchen tickets and receipts with the native printing engine
+  included in Restora Desktop (no separate install; secure connection
+  through the restaurant's authenticated printer settings).
 - Secure by design: sandboxed window, no plugins, same dashboard
   as the web app.
 
@@ -40,17 +42,19 @@ AI-generated images; the screenshots must be the real app.
 
 Restora Live is a full-trust Win32 (Electron) desktop app. It must run
 outside the UWP app container to host a desktop window for the
-restaurant dashboard, communicate with the locally paired Restora print
-agent over loopback (127.0.0.1:17777), and use local-network access.
+restaurant dashboard, start its included native print engine as a full-trust child process,
+communicate with it over loopback (127.0.0.1:17777), and use local-network access.
 There is no packaged (non-full-trust) equivalent for these
 capabilities.
 
 ## Known limitation — verify on real Windows after install
 
-The dashboard posts slips to the print agent on 127.0.0.1:17777.
-`privateNetworkClientServer` is declared, but loopback behaviour of
-the packaged app must be verified on a real Windows PC after install
-from the Store, exactly as with Restora Agent.
+The dashboard posts slips to the engine bundled inside the same MSIX
+package on 127.0.0.1:17777. `privateNetworkClientServer` and
+`runFullTrust` are declared, but launching the packaged child process
+and loopback communication must be verified on a real Windows PC
+after a Store installation. Windows CI only verifies the portable
+installer and packaged payload.
 
 ## Name reservation deadline
 
