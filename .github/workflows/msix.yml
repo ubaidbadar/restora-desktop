@@ -1,0 +1,175 @@
+name: MSIX (Store package)
+
+# Builds the Microsoft Store package (unsigned) for Restora Live and
+# uploads it as a workflow artifact. Microsoft signs the package after
+# Store certification; the artifact here is NOT a customer installer
+# and must not be distributed as one.
+#
+# Identity values are the verified Partner Center values for the
+# "Badar Digital" account, checked 2026-11-12 (product "Restora Live",
+# Store ID 9NHM8DPCGPZD). The "Verify Store identity" step checks
+# Publisher + version exactly and rejects a stale Identity Name.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packaging/**'
+      - '.github/workflows/msix.yml'
+      - 'src/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'electron-release.json'
+      - 'scripts/package-portable.cjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MSIX_VERSION: 0.1.0.0
+  PACKAGE_NAME: RestoraLive-0.1.0.0.msix
+
+jobs:
+  msix:
+    runs-on: windows-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies without Electron's install-time download
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+        run: npm install --no-audit --no-fund
+
+      - name: Run security and packaging checks
+        run: npm run check
+
+      - name: Cache official Electron archive
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/restora-electron
+          key: electron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('electron-release.json') }}
+
+      - name: Fetch and SHA-256 verify the official Electron Windows release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $manifest = Get-Content -LiteralPath 'electron-release.json' -Raw | ConvertFrom-Json
+          if ($manifest.platform -ne 'win32' -or $manifest.arch -ne 'x64') {
+            throw 'Unexpected Electron archive platform/architecture'
+          }
+          $asset = "electron-v$($manifest.version)-win32-x64.zip"
+          $directory = Join-Path $env:RUNNER_TEMP 'restora-electron'
+          $archive = Join-Path $directory $asset
+          New-Item -ItemType Directory -Force -Path $directory | Out-Null
+          $verified = $false
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            if (Test-Path -LiteralPath $archive) {
+              $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -eq $manifest.sha256) {
+                $verified = $true
+                break
+              }
+              Remove-Item -LiteralPath $archive -Force
+              Write-Warning 'Cached Electron archive had a mismatched checksum; discarded'
+            }
+            Write-Host "Fetching $asset from electron/electron GitHub Releases (attempt $attempt/5)"
+            gh release download "v$($manifest.version)" --repo electron/electron --pattern $asset --dir $directory --clobber
+            if ($LASTEXITCODE -eq 0 -and (Test-Path -LiteralPath $archive)) {
+              $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+              if ($actual -ne $manifest.sha256) {
+                Remove-Item -LiteralPath $archive -Force
+                throw "Official Electron archive checksum mismatch (actual: $actual)"
+              }
+              $verified = $true
+              break
+            }
+            if ($attempt -lt 5) {
+              Start-Sleep -Seconds (10 * $attempt)
+            }
+          }
+          if ($verified) {
+            Add-Content -LiteralPath $env:GITHUB_ENV -Value "RESTORA_ELECTRON_ARCHIVE=$archive"
+            Write-Host "Verified official Electron $($manifest.version) SHA-256: $($manifest.sha256)"
+          } else {
+            Write-Warning 'GitHub CLI download unavailable; packaging will retry through official @electron/get endpoint'
+          }
+
+      - name: Verify Store identity and assets
+        shell: pwsh
+        run: |
+          [xml]$manifest = Get-Content packaging/AppxManifest.xml -Raw
+          if ($manifest.Package.Identity.Name -ne 'BadarDigital.RestoraLive') {
+            throw "Manifest Identity Name is '$($manifest.Package.Identity.Name)', expected the Partner Center identity 'BadarDigital.RestoraLive'."
+          }
+          if ($manifest.Package.Identity.Publisher -ne 'CN=72D821D7-890E-4CCA-94D2-675D84F355AA') {
+            throw "Manifest Identity Publisher is '$($manifest.Package.Identity.Publisher)', expected the Partner Center Publisher ID."
+          }
+          if ($manifest.Package.Identity.Version -ne $env:MSIX_VERSION) {
+            throw "Manifest Identity Version is '$($manifest.Package.Identity.Version)', expected '$env:MSIX_VERSION'."
+          }
+          foreach ($asset in 'StoreLogo.png', 'Square44x44Logo.png', 'Square150x150Logo.png', 'Wide310x150Logo.png', 'SplashScreen.png') {
+            if (-not (Test-Path "packaging/Assets/$asset")) {
+              throw "Missing packaging asset: packaging/Assets/$asset"
+            }
+          }
+
+      - name: Package portable Windows desktop
+        run: npm run dist:portable
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Validate portable ZIP contents
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path dist -Filter 'Restora-POS-Portable-*-win-x64.zip' | Select-Object -First 1
+          if (-not $zip) { throw 'Portable Windows ZIP is missing' }
+          $unpacked = Join-Path $env:RUNNER_TEMP 'restora-portable-validation'
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $unpacked -Force
+          foreach ($item in @('Restora POS.exe', 'resources/app/package.json', 'resources/app/src/main.cjs', 'resources/app/src/security.cjs')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $unpacked $item))) {
+              throw "Portable ZIP missing $item"
+            }
+          }
+          Write-Host 'Portable ZIP file structure verified'
+
+      - name: Stage the MSIX package
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem -Path dist -Filter 'Restora-POS-Portable-*-win-x64.zip' | Select-Object -First 1
+          $stage = Join-Path $env:RUNNER_TEMP 'msix-stage'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          Expand-Archive -LiteralPath $zip.FullName -DestinationPath $stage -Force
+          if (-not (Test-Path -LiteralPath (Join-Path $stage 'Restora POS.exe'))) {
+            throw 'Staged package is missing Restora POS.exe'
+          }
+          Copy-Item 'packaging\AppxManifest.xml' $stage
+          New-Item -ItemType Directory -Path (Join-Path $stage 'Assets') -Force | Out-Null
+          Copy-Item 'packaging\Assets\*.png' (Join-Path $stage 'Assets')
+
+      - name: Pack the MSIX (unsigned)
+        # Unsigned on purpose: Partner Center / the Store signs the
+        # package on submission. Do not install this artifact directly
+        # on customer PCs.
+        shell: pwsh
+        run: |
+          $makeappx = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe" |
+            Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
+          if (-not $makeappx) { throw 'Install the Windows SDK (MakeAppx.exe is required).' }
+          & $makeappx.FullName pack /o /h SHA256 /d (Join-Path $env:RUNNER_TEMP 'msix-stage') /p "$env:GITHUB_WORKSPACE\$env:PACKAGE_NAME"
+          if ($LASTEXITCODE -ne 0) { throw 'MSIX validation or packaging failed.' }
+          Get-FileHash -Algorithm SHA256 "$env:GITHUB_WORKSPACE\$env:PACKAGE_NAME"
+
+      - name: Upload the MSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RestoraLive-0.1.0.0-msix
+          path: RestoraLive-0.1.0.0.msix
+          if-no-files-found: error
