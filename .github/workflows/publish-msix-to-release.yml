@@ -1,0 +1,70 @@
+name: Publish MSIX to release
+
+# Attaches the MSIX Store package built by the MSIX workflow to a
+# GitHub release, so the package file can be downloaded and submitted
+# to Partner Center. The MSIX here is unsigned; Microsoft signs it
+# after Store certification. It is NOT a customer installer and must
+# not be distributed as one.
+#
+# Run from Actions → Publish MSIX to release → Run workflow, with the
+# MSIX workflow run id (the pull-request run that built the artifact)
+# and the release tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'MSIX workflow run id that built the artifact'
+        required: true
+        default: '43158669336'
+      tag:
+        description: 'Release tag to attach the MSIX to'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+env:
+  MSIX_NAME: RestoraLive-0.1.0.0-msix
+  MSIX_FILE: RestoraLive-0.1.0.0.msix
+  # SHA-256 of the MSIX produced by the MSIX workflow run
+  # (Get-FileHash in the Pack step). Checked before attaching.
+  MSIX_SHA256: 0421c7d0db9811ecab21f9fb915825a66f93b8bb470d50613212c4f60fc3ad73
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Download the MSIX artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh run download "${{ inputs.run_id }}" --repo ubaidbadar/restora-desktop -n "$MSIX_NAME" -D ./msix
+          ls -la ./msix
+
+      - name: Verify the MSIX checksum
+        run: |
+          actual=$(sha256sum "./msix/$MSIX_FILE" | cut -d' ' -f1)
+          echo "MSIX SHA-256: $actual"
+          if [ "$actual" != "$MSIX_SHA256" ]; then
+            echo "Checksum mismatch: expected $MSIX_SHA256"
+            exit 1
+          fi
+
+      - name: Create the release if it does not exist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "${{ inputs.tag }}" --repo ubaidbadar/restora-desktop >/dev/null 2>&1 || \
+          gh release create "${{ inputs.tag }}" --repo ubaidbadar/restora-desktop \
+            --title "Restora Live ${{ inputs.tag }}" \
+            --notes "Microsoft Store package (unsigned MSIX) for Restora Live. Microsoft signs the package after Store certification. This artifact is NOT a customer installer."
+
+      - name: Attach the MSIX to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ inputs.tag }}" "./msix/$MSIX_FILE" --repo ubaidbadar/restora-desktop --clobber
+          gh release view "${{ inputs.tag }}" --repo ubaidbadar/restora-desktop
