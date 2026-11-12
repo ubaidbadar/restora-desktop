@@ -25,7 +25,7 @@ runs:
         $expected = (Get-Content -LiteralPath print-engine.json -Raw | ConvertFrom-Json).sha
         $actual = (git -C print-engine-source rev-parse HEAD).Trim()
         if ($actual -ne $expected) { throw 'Native print engine checkout changed unexpectedly' }
-        cargo build --release --locked --manifest-path print-engine-source/Cargo.toml
+        cargo build --release --locked --manifest-path print-engine-source/Cargo.toml --config 'profile.release.strip="symbols"' --config 'profile.release.lto="thin"' --config 'profile.release.codegen-units=1'
         if ($LASTEXITCODE -ne 0) { throw 'Native print engine compilation failed' }
         New-Item -ItemType Directory -Force native | Out-Null
         Copy-Item -LiteralPath print-engine-source/target/release/restora-pc-agent.exe -Destination native/print-engine.exe
