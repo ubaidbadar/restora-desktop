@@ -2,10 +2,12 @@
 
 const { app, BrowserWindow, Menu, shell, session, dialog } = require('electron');
 const { getAppUrl, isInternalUrl, isSafeExternalUrl } = require('./security.cjs');
+const { startPrintEngine, stopPrintEngine } = require('./print_engine.cjs');
 
 // The hosted restaurant UI handles authentication and permissions. Electron does not
 // receive auth cookies, Meta credentials or privileged IPC from the renderer.
 let window = null;
+let printEngine = null;
 const APP_URL = getAppUrl();
 
 function openExternal(url) {
@@ -34,6 +36,9 @@ function createWindow() {
   });
   window.once('ready-to-show', () => window?.show());
   const contents = window.webContents;
+  // UI-only hint for the existing web printer Settings screen: not an auth boundary.
+  // Permissions and printer writes still require the server and localhost guards.
+  contents.setUserAgent(`${contents.getUserAgent()} RestoraDesktop/1`);
 
   contents.setWindowOpenHandler(({ url }) => {
     if (!isInternalUrl(url, APP_URL)) openExternal(url);
@@ -84,6 +89,15 @@ else {
     window.focus();
   });
   app.on('ready', () => {
+    // The bundled engine starts silently and shares the existing secure local protocol.
+    // It never needs a second installer, tray or Windows autostart entry.
+    try {
+      printEngine = startPrintEngine({ packaged: app.isPackaged });
+    } catch (error) {
+      console.error('[Restora Desktop] built-in printing unavailable:', error.message);
+      dialog.showErrorBox('Restora printing unavailable',
+        'The desktop installation is missing its print engine. Reinstall Restora Desktop to restore printing.');
+    }
     // The existing paired Rust agent is reachable on 127.0.0.1:17777 from the
     // trusted app. Allow local-network access only for this origin; no broader
     // device, media, clipboard, geolocation, HID/serial/USB permissions.
@@ -102,5 +116,9 @@ else {
     createWindow();
   });
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+  app.on('before-quit', () => {
+    stopPrintEngine(printEngine);
+    printEngine = null;
+  });
   app.on('window-all-closed', () => app.quit());
 }
