@@ -9,7 +9,7 @@ permissions:
 jobs:
   installer:
     runs-on: windows-latest
-    timeout-minutes: 55
+    timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -92,6 +92,47 @@ jobs:
             }
           }
           Write-Host 'Portable ZIP file structure verified; interactive Windows acceptance remains required'
+      - name: Smoke test packaged Electron owns native printing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $desktop = Resolve-Path 'dist/portable/Restora POS.exe'
+          $before = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).'Restora Agent'
+          $process = Start-Process -FilePath $desktop -PassThru
+          try {
+            $healthy = $false
+            for ($attempt = 0; $attempt -lt 45; $attempt++) {
+              Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) { throw 'Packaged Restora Desktop quit during native startup' }
+              try {
+                $response = Invoke-WebRequest 'http://127.0.0.1:17777/status' -TimeoutSec 2
+                if ($response.StatusCode -eq 200) { $healthy = $true; break }
+              } catch { }
+            }
+            if (-not $healthy) { throw 'Restora Desktop did not start its included print engine' }
+            $blocked = Invoke-WebRequest 'http://127.0.0.1:17777/print' -Method POST -Body '{}' -ContentType 'application/json' -SkipHttpErrorCheck
+            if ($blocked.StatusCode -ne 403) { throw "Originless print not rejected: $($blocked.StatusCode)" }
+            $after = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).'Restora Agent'
+            if ($before -ne $after) { throw 'Embedded engine altered standalone Windows startup settings' }
+            Write-Host 'Desktop launched native engine, kept origin security and did not install a separate startup service'
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+          # The embedded engine watches its owner handle; no hidden service may remain.
+          $stopped = $false
+          for ($attempt = 0; $attempt -lt 15; $attempt++) {
+            Start-Sleep -Seconds 1
+            try {
+              $null = Invoke-WebRequest 'http://127.0.0.1:17777/status' -TimeoutSec 1
+            } catch {
+              $stopped = $true
+              break
+            }
+          }
+          if (-not $stopped) { throw 'Embedded printing engine survived the owning desktop process' }
+          Write-Host 'Embedded engine stopped with Electron'
+
       - uses: actions/upload-artifact@v4
         with:
           name: restora-windows-portable
