@@ -77,6 +77,12 @@ async function main() {
   await fs.mkdir(appDir, { recursive: true });
   await fs.copyFile(path.join(root, 'package.json'), path.join(appDir, 'package.json'));
   await fs.cp(path.join(root, 'src'), path.join(appDir, 'src'), { recursive: true });
+  // Match electron-builder's extraResources path exactly. Never ship a desktop
+  // package that asks staff to download a separate printing application.
+  const engineDir = path.join(output, 'resources', 'print-engine');
+  await fs.mkdir(engineDir, { recursive: true });
+  await fs.copyFile(path.join(root, 'native', 'print-engine.exe'),
+    path.join(engineDir, 'restora-pc-agent.exe'));
   await fs.rename(path.join(output, 'electron.exe'), path.join(output, 'Restora POS.exe'));
   await fs.rm(archive, { force: true });
   powerShell(`Compress-Archive -Path ${psQuote(path.join(output, '*'))} -DestinationPath ${psQuote(archive)} -Force`);
