@@ -121,6 +121,9 @@ jobs:
             }
           }
 
+      - name: Compile source-pinned native printing engine
+        uses: ./.github/actions/build-print-engine
+
       - name: Package portable Windows desktop
         run: npm run dist:portable
         env:
@@ -133,7 +136,7 @@ jobs:
           if (-not $zip) { throw 'Portable Windows ZIP is missing' }
           $unpacked = Join-Path $env:RUNNER_TEMP 'restora-portable-validation'
           Expand-Archive -LiteralPath $zip.FullName -DestinationPath $unpacked -Force
-          foreach ($item in @('Restora POS.exe', 'resources/app/package.json', 'resources/app/src/main.cjs', 'resources/app/src/security.cjs')) {
+          foreach ($item in @('Restora POS.exe', 'resources/app/package.json', 'resources/app/src/main.cjs', 'resources/app/src/security.cjs', 'resources/app/src/print_engine.cjs', 'resources/print-engine/restora-pc-agent.exe')) {
             if (-not (Test-Path -LiteralPath (Join-Path $unpacked $item))) {
               throw "Portable ZIP missing $item"
             }
