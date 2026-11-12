@@ -28,9 +28,9 @@ permissions:
 env:
   MSIX_NAME: RestoraLive-0.1.0.0-msix
   MSIX_FILE: RestoraLive-0.1.0.0.msix
-# SHA-256 of the MSIX produced by the MSIX workflow run 43171569229
+  # SHA-256 of the MSIX produced by the MSIX workflow run 43171569229
   # (Get-FileHash in the Pack step). Checked before attaching.
-MSIX_SHA256: 4a94168f4a7cb49b4fff004232f482c9bb362525b204348529c39c8b7d9a619f
+  MSIX_SHA256: 4a94168f4a7cb49b4fff004232f482c9bb362525b204348529c39c8b7d9a619f
 
 jobs:
   publish:
