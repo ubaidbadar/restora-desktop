@@ -1,7 +1,7 @@
 # Restora Live — Microsoft Store listing (draft)
 
 Product: **Restora Live** (Store ID 9NHM8DPCGPZD, reserved 2026-11-12)
-Package identity: BadarDigital.RestoraLive, version 0.1.0.0
+Package identity: BadarDigital.RestoraLive, version 0.1.1.0
 Publisher: Badar Digital (CN=72D821D7-890E-4CCA-94D2-675D84F355AA)
 
 ## Listing text (verified facts only)
