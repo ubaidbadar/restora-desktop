@@ -1,0 +1,55 @@
+name: Tauri 2 Windows desktop
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/tauri2-integrated-printing-20261120]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+      - name: Verify no Electron runtime or dependencies
+        shell: pwsh
+        run: |
+          if ((Get-Content package.json -Raw) -match 'electron') { throw 'Electron dependency found' }
+          if (Test-Path 'src/main.cjs') { throw 'Old Electron entrypoint still exists' }
+      - name: Check native source formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - name: Run native unit tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
+      - name: Check Rust lints
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Verify desktop metadata
+        run: npm run check
+      - name: Install Tauri CLI
+        run: npm install --no-audit --no-fund
+      - name: Build Windows NSIS setup
+        run: npm run build
+      - name: Assert Windows installer exists
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*setup.exe')
+          if ($installer.Count -lt 1) { throw 'Tauri NSIS setup was not produced' }
+          $installer | Select-Object Name, Length
+      - name: Upload unsigned Windows test installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: restora-tauri2-win-x64-unsigned
+          path: src-tauri/target/release/bundle/nsis/*setup.exe
+          if-no-files-found: error

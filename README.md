@@ -1,128 +1,35 @@
-# Restora Desktop — Electron for Windows
+# Restora POS — Tauri 2 (Windows)
 
-A minimal **Electron container** for the existing React restaurant POS at
-`https://app.restora.live/`. The dashboard itself stays in
-[restora-web](https://github.com/ubaidbadar/restora-web) and continues using the
-existing Better Auth cookie session and REST API. **No forked menu, order,
-offline queue or business logic.**
+Restora POS is a **Tauri 2 + Rust** desktop application. There is **no Electron runtime, Node runtime, standalone print-agent EXE, hidden PowerShell, or separate printer setup installer** in the shipped application.
 
-**One installer includes automatic printing.** Restora Desktop bundles the
-existing, battle-tested Rust ESC/POS print engine internally. It starts silently
-with Electron, exits when its owning desktop process exits (including after a
-crash), and keeps the encrypted pairing, printer settings, branch checks,
-durable de-duplication journal, and backend print queue. Staff **do not install
-a separate Restora Agent**. Printer setup is performed in the existing Restora
-Settings → Printers page, where the built-in engine pairs through the same
-authenticated, branch-scoped flow.
+The React 19/Vite 8 POS stays in [restora-web](https://github.com/ubaidbadar/restora-web). To keep Better Auth's existing httpOnly cookie session, hosted Google/Meta authentication, IndexedDB outbox and web push flows intact, the Tauri WebView2 window loads the existing trusted [https://app.restora.live/](https://app.restora.live/) website. The desktop Rust worker links the native [restora-pc-agent](https://github.com/ubaidbadar/restora-pc-agent) library **inside the same application process**, and runs its already hardened, localhost-restricted print API, encrypted pairing, polling, retries and journal. It does **not** spawn the old PC agent executable.
 
-There is no privileged IPC bridge or duplicate printing protocol exposed to
-the React renderer. The web app still talks to the restricted
-`127.0.0.1:17777` interface. Browser-only customers can continue using the
-separately installed [Restora Agent](https://github.com/ubaidbadar/restora-pc-agent).
+## Windows build
 
-## Run locally
-
-Install Node.js 22 or later.
-
-```sh
-npm install
-npm start
-npm run check
-```
-
-By default Electron opens **https://app.restora.live/**. To test a local Vite
-dashboard, launch in development mode only:
+Prerequisites: Windows 10/11, current Microsoft WebView2, Rust stable (MSVC toolchain), C++ build tools, Node 22+ and npm.
 
 ```powershell
-$env:RESTORA_DESKTOP_DEV = "1"
-$env:RESTORA_APP_URL = "http://localhost:3000/"
-npm start
+npm install
+npm run check
+cargo test --manifest-path src-tauri/Cargo.toml
+npm run build
 ```
 
-Arbitrary remote URL overrides are refused to avoid credential theft.
+The unsigned **NSIS test installer** is built in `src-tauri/target/release/bundle/nsis/`. GitHub Actions runs native unit tests, clippy, bundling checks and publishes its unsigned test artifact. Sign and hardware-validate before customer distribution or Microsoft Store submission.
 
-## Windows installer
+## Built-in printing and no printer configuration
 
-```sh
-npm run dist
-```
+1. Install the supported ESC/POS-compatible thermal printer **in Windows**; Windows provides its driver, connection and default-printer selection.
+2. Start Restora POS and sign in to the correct restaurant/branch. An authorized user with `devices:manage` can pair it automatically; existing pairing stays private to that Windows account.
+3. If there is no explicit assignment for kitchen or receipt slips, the backend routes that slip kind to the **Windows default printer**. No Restora printer mapping screen is necessary. Existing explicit kitchen/bar/receipt assignments are retained. Windows changing the default moves only auto-routed kinds.
+4. The same Rust engine prints server-queued slips and offline local slips; a durable journal protects against duplicate auto-prints. Failed jobs use the existing retry/dead-letter workflow.
 
-Or run **Actions → Windows installer (unsigned test artifact) → Run workflow**.
-The workflow builds a portable `restora-windows-portable` ZIP first and then
-attempts an NSIS installer (artifact `restora-windows-unsigned-installer`).
-If the NSIS tool download fails, use the portable archive: unzip it and start
-`Restora POS.exe` from the extracted directory. Both are unsigned internal-test builds, and both include the built-in print engine.
+Important: **Raw ESC/POS bytes are not a universal Windows printing language.** An ordinary A4/PDF/graphics printer cannot be promised correct thermal receipt output. Without a configured Windows default or an ESC/POS-compatible device, printing must surface a failure rather than silently route kitchen tickets to an arbitrary device. Printer installation and selection are Windows responsibilities, not a Restora configuration flow.
 
-This first installer, including the embedded print engine, is **unsigned** and is intended for internal testing only.
-Do not distribute commercially before code signing, publisher details,
-auto-update signing/verification, Windows SmartScreen testing and installer QA.
+The old **standalone Restora Agent must be exited or uninstalled before starting this build** because it reserves port `127.0.0.1:17777`. That port is kept for compatibility with the existing web application's trusted localhost protocol, without adding a privileged Tauri renderer API. All remote Tauri capabilities are disabled; only the existing Restora website and provider auth origins may navigate.
 
-## Security
+## Known release requirements
 
-- Context isolation **on**, sandbox **on**, Node integration **off**
-- No privileged preload script, IPC bridge or webview access
-- Top-level navigation confined to the approved Restora app origin
-- External HTTPS, mailto and telephone links open in the operating-system browser
-- Host permissions restricted. The trusted app origin may request notification and local-network access for the bundled native print engine; downloads are blocked pending secure export design.
-- Electron main process never handles session cookies, tenant IDs or Meta tokens
-- HTTPS production URL is fixed; localhost override only when intentionally developing
+The hosted website remains the source of the user interface. **A clean offline cold start is not guaranteed** just by installing this shell; existing service-worker/IndexedDB behavior needs a real Windows WebView2 offline acceptance run. Also verify live sign-in and Better Auth/Google and Meta popups, native printer hotplug/default changes, 58/80mm paper formats, USB and network thermal printer output, paper-out/retry, software crash/restart, WebView2 deployment, permissions, branch isolation and credential migration. The CI artifact is **not** a signed production release. Do not deploy these interdependent repository changes separately.
 
-Electron wraps the *deployed web dashboard*. A source commit does not change the
-desktop screen until the web dashboard is deployed. Offline behavior follows the
-deployed web app's service-worker and IndexedDB implementation; full offline
-cold-start is **not yet validated** in Electron.
-
-Meta Embedded Signup uses a browser popup and needs an acceptance test inside
-Electron before restaurant owners are directed to use it there. If popup
-restrictions interfere, complete first-time WhatsApp connection in the regular
-browser instead of relaxing Electron security.
-
-## Delivery phases
-
-1. **Foundation:** secure Electron shell, CI, Windows NSIS test installer, tests.
-2. **Integration:** package the pinned Rust print engine *inside* Electron; verify automatic launch and shutdown, local pairing, offline slips, CORS/private-network permissions, backend retries and Windows ESC/POS printers.
-3. **Release:** Windows hardware print QA, offline/online order replay, signing,
-   auto updates and support/rollback instructions.
-
-Do not mistake an installer artifact for a production-ready Windows POS.
-
-## Verified Windows build downloads
-
-The Actions build pins **Electron ${manifest.version}** and SHA-256 in
-`electron-release.json`. It first uses the official `electron/electron` GitHub
-release API via `gh release download` (with retry and a validated cache), then
-falls back to official `@electron/get` with retry if GitHub's API route fails.
-Both paths verify the archive against the pinned official SHA-256 before it is
-unpacked. Do not replace either source with a third-party binary mirror.
-
-The workflow validates that the portable ZIP contains the executable and shell
-sources, and uploads the ZIP as a GitHub Actions test artifact if packaging
-succeeds. It also tries an unsigned NSIS installer. A successful ZIP-structure
-check is **not** a Windows desktop launch or hardware acceptance test.
-
-Before a commercial release, manually test on Windows 10 and 11: launch
-`https://app.restora.live/`, signed-in session persistence, Meta embedded
-signup/popup behavior, bundled print engine on `127.0.0.1:17777`, offline
-queue/recovery, ESC/POS printing, and cross-restaurant tenant isolation.
-Only distribute after code signing, installer integrity checks and approval.
-If the official release is unreachable, issue #2 remains blocked.
-
-## Bundled printing build and safety
-
-The source pinned in `print-engine.json` is built with `cargo build --release --locked`
-by the common GitHub composite action in `.github/actions/build-print-engine`.
-Windows CI includes the resulting executable in **both** the portable ZIP and
-NSIS/MSIX packages. Packaging fails if the native executable is missing; it is
-never downloaded at runtime or installed as an independent Windows app.
-
-The embedded engine runs as `restora-pc-agent.exe --embedded --parent-pid <Electron PID>`.
-It exposes only the existing origin-restricted localhost API and does not open
-its own tray or create a Run-key autostart entry. It is supervised by Electron
-and exits when its parent process exits. Existing standalone Agent installs may
-still be used by browser-only customers.
-
-**Pending manual acceptance:** verify printer pairing on real Windows 10/11,
-58 mm and 80 mm slips, USB/network devices, paper-out/retries, branch switching,
-Windows Store full-trust child-process behavior, offline order printing and
-signed installer delivery. Source merge/CI is not approval to publish the
-unsigned installer or Microsoft Store release.
+The migrated sources replace the old Electron implementation; existing web/PWA users can continue using the optional separate agent while the Windows Tauri build is being rolled out.

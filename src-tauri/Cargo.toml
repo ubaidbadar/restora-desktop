@@ -1,0 +1,19 @@
+[package]
+name = "restora-desktop"
+version = "0.2.0"
+edition = "2024"
+description = "Restora POS desktop application with integrated Rust printing"
+license = "UNLICENSED"
+build = "build.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-single-instance = "2"
+restora-pc-agent = { git = "https://github.com/ubaidbadar/restora-pc-agent", rev = "afa85ff1ca0995b89f73803a370794e59e3e8139", features = ["embedded"] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
