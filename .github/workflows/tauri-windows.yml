@@ -49,6 +49,41 @@ jobs:
           $installer = @(Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*setup.exe')
           if ($installer.Count -lt 1) { throw 'Tauri NSIS setup was not produced' }
           $installer | Select-Object Name, Length
+      - name: Smoke launch and verify in-process printing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $binary = Join-Path (Get-Location) 'src-tauri/target/release/restora-desktop.exe'
+          if (-not (Test-Path -LiteralPath $binary)) { throw "Tauri desktop binary missing: $binary" }
+          $beforeAgents = @(Get-Process -Name 'restora-pc-agent' -ErrorAction SilentlyContinue).Count
+          $process = Start-Process -FilePath $binary -PassThru
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 30; $attempt++) {
+              Start-Sleep -Seconds 1
+              $process.Refresh()
+              if ($process.HasExited) { throw "Restora Desktop exited unexpectedly (code $($process.ExitCode))" }
+              try {
+                $snapshot = Invoke-RestMethod -Uri 'http://127.0.0.1:17777/status' -TimeoutSec 2
+                if ($null -ne $snapshot.paired) { $ready = $true; break }
+              } catch { }
+            }
+            if (-not $ready) { throw 'The built-in Rust print engine did not start' }
+            $blocked = Invoke-WebRequest -Uri 'http://127.0.0.1:17777/setup/pair' -Method Post -ContentType 'application/json' -Body '{"code":"000000"}' -SkipHttpErrorCheck -TimeoutSec 3
+            if ($blocked.StatusCode -ne 403) { throw "Originless pairing request was not blocked: $($blocked.StatusCode)" }
+            $afterAgents = @(Get-Process -Name 'restora-pc-agent' -ErrorAction SilentlyContinue).Count
+            if ($afterAgents -ne $beforeAgents) { throw 'A standalone print-agent process was unexpectedly created' }
+            Write-Host 'Tauri app launched, in-process printer responded, unauthorized POST blocked; no child agent process.'
+          } finally {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+          }
+          Start-Sleep -Milliseconds 600
+          try {
+            $stillOpen = Invoke-WebRequest -Uri 'http://127.0.0.1:17777/status' -TimeoutSec 2
+            throw 'The native printer listener outlived its Tauri application'
+          } catch {
+            if ($_.Exception.Message -eq 'The native printer listener outlived its Tauri application') { throw }
+          }
       - name: Upload unsigned Windows test installer
         uses: actions/upload-artifact@v5
         with:
