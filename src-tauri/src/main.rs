@@ -72,8 +72,14 @@ mod tests {
 
     #[test]
     fn blocks_non_restora_navigation_and_untrusted_popups() {
-        assert!(trusted_navigation(&"https://app.restora.live/orders".parse().unwrap()));
-        assert!(trusted_popup(&"https://accounts.google.com/o/oauth2/v2/auth".parse().unwrap()));
+        assert!(trusted_navigation(
+            &"https://app.restora.live/orders".parse().unwrap()
+        ));
+        assert!(trusted_popup(
+            &"https://accounts.google.com/o/oauth2/v2/auth"
+                .parse()
+                .unwrap()
+        ));
         for url in [
             "http://app.restora.live",
             "https://app.restora.live.evil.example",
