@@ -14,8 +14,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '24'
       - uses: dtolnay/rust-toolchain@stable
@@ -31,6 +31,8 @@ jobs:
           if (Test-Path 'src/main.cjs') { throw 'Old Electron entrypoint still exists' }
       - name: Check native source formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+      - name: Resolve locked native dependencies
+        run: cargo generate-lockfile --manifest-path src-tauri/Cargo.toml
       - name: Run native unit tests
         run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Check Rust lints
@@ -48,7 +50,7 @@ jobs:
           if ($installer.Count -lt 1) { throw 'Tauri NSIS setup was not produced' }
           $installer | Select-Object Name, Length
       - name: Upload unsigned Windows test installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: restora-tauri2-win-x64-unsigned
           path: src-tauri/target/release/bundle/nsis/*setup.exe
