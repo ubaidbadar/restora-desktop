@@ -12,7 +12,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-single-instance = "2"
-restora-pc-agent = { git = "https://github.com/ubaidbadar/restora-pc-agent", rev = "d61a3a3b6530fa96e8692f85d8ffa3c629602c2f", features = ["embedded"] }
+restora-pc-agent = { git = "https://github.com/ubaidbadar/restora-pc-agent", rev = "e3f33af8b4285df971ca37248698dd2a51f1e390", features = ["embedded"] }
 
 [features]
 default = ["custom-protocol"]
