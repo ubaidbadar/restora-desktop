@@ -1,35 +1,15 @@
-# Privacy Policy — Restora Live (Windows desktop app)
+# Restora POS for Windows — Privacy
 
-**Last updated: 12 November 2026**
+**Updated: 20 November 2026**
 
-Restora Live is a Windows desktop container for the Restora restaurant
-dashboard at https://app.restora.live/. The dashboard itself is the
-Restora web app; this desktop app does not fork it or add its own
-data collection.
+The Windows desktop application uses Tauri 2 and Microsoft WebView2 to display the existing Restora website at https://app.restora.live/. Authentication, orders, restaurant accounts, staff and customers remain governed by Restora's existing service privacy policy. Login sessions are stored in the operating system's WebView2 browser profile through secure httpOnly cookies, not exposed to the native printing worker.
 
-## What this app itself collects
+## Native printing
 
-Nothing. The desktop shell has no analytics, no tracking, and no
-advertising. It does not read, store, or transmit personal data on its
-own. It has no privileged access to your computer: it runs with the
-sandbox on, Node integration off, and no scripting bridge to the
-operating system.
+The Rust printing component runs in the same process as Restora Desktop. It discovers printer names and the user's default printer from Windows, and submits print instructions to the locally installed printer driver. Like the previous standalone Restora Agent, it communicates with the authenticated Restora API over HTTPS to receive queued receipt/kitchen slips and report printer inventory, completion, and errors. The server uses inventory and assignments to route restaurant print jobs. Local print history is retained to prevent duplicate tickets; pairing credentials are protected with Windows DPAPI.
 
-## Sign-in and restaurant data
+The printing component listens only on `127.0.0.1:17777` and permits browser access only from an approved Restora origin. No remote webpage receives privileged Tauri IPC permissions. There is no additional printer-driver or background application installation.
 
-Signing in and everything you do in the dashboard — orders, tables,
-menu, customers, staff — is handled by the Restora web app and the
-Restora API at https://restora.live, exactly as it is when you use the
-dashboard in a browser. The Electron main process never handles session
-cookies, tenant IDs, or Meta tokens.
+Restora Desktop itself does not add advertising or a third-party analytics SDK. It does, however, communicate with the Restora website and backend to operate the POS and with Microsoft WebView2 infrastructure as required by that platform.
 
-## Printing
-
-The dashboard can print through the Restora print agent running on the
-same PC (it listens on 127.0.0.1:17777). That traffic stays on your own
-computer; the desktop app sends nothing about your printers anywhere
-else.
-
-## Contact
-
-Questions about this policy: contact us through https://restora.live.
+For customer support and privacy questions, use https://restora.live/.
